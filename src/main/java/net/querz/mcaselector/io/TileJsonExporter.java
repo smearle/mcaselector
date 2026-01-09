@@ -139,7 +139,10 @@ public class TileJsonExporter {
 	 */
 	public TileData extractTileFromChunks(RegionChunk[] chunks, int tileOriginX, int tileOriginZ,
 										  int minY, int maxY, boolean includeAir) {
-		List<BlockEntry> allBlocks = new ArrayList<>();
+		// First pass: extract ALL blocks (including air) to find the highest non-air block
+		// and to have data for the adaptive height algorithm
+		Map<Long, BlockEntry> allBlocksByPos = new LinkedHashMap<>();
+		int highestNonAirY = Integer.MIN_VALUE;
 
 		for (int i = 0; i < 4; i++) {
 			RegionChunk chunk = chunks[i];
@@ -157,7 +160,8 @@ public class TileJsonExporter {
 			}
 
 			ChunkData chunkData = new ChunkData(chunk, null, null, false);
-			List<ChunkFilter.BlockExtractor.BlockInfo> blocks = extractor.extractBlocks(chunkData, minY, maxY, includeAir);
+			// Extract all blocks including air for height detection
+			List<ChunkFilter.BlockExtractor.BlockInfo> blocks = extractor.extractBlocks(chunkData, minY, maxY, true);
 
 			for (ChunkFilter.BlockExtractor.BlockInfo block : blocks) {
 				// Convert to tile-relative coordinates (0-31 range)
@@ -166,16 +170,95 @@ public class TileJsonExporter {
 
 				// Sanity check - block should be within this tile
 				if (relX >= 0 && relX < 32 && relZ >= 0 && relZ < 32) {
-					allBlocks.add(new BlockEntry(relX, block.y(), relZ, block.name(), block.properties()));
+					BlockEntry entry = new BlockEntry(relX, block.y(), relZ, block.name(), block.properties());
+					// Key: pack x, y, z into a long for uniqueness
+					long key = ((long) relX << 40) | ((long) (block.y() + 2048) << 20) | relZ;
+					allBlocksByPos.put(key, entry);
+
+					// Track highest non-air block
+					if (!isAir(block.name()) && block.y() > highestNonAirY) {
+						highestNonAirY = block.y();
+					}
 				}
 			}
 		}
 
-		if (allBlocks.isEmpty()) {
+		if (highestNonAirY == Integer.MIN_VALUE) {
+			// No non-air blocks found
 			return null;
 		}
 
-		return new TileData(tileOriginX, tileOriginZ, minY, maxY, allBlocks);
+		// Calculate export range: start 15 blocks above highest non-air block
+		int exportStartY = Math.min(highestNonAirY + 15, maxY);
+		// Align to 32-block chunk boundaries (round up to next multiple of 32)
+		int chunkTopY = ((exportStartY + 31) / 32) * 32 - 1;
+
+		List<BlockEntry> resultBlocks = new ArrayList<>();
+
+		// Export in 32-block height chunks, going downward
+		while (chunkTopY >= minY) {
+			int chunkBottomY = chunkTopY - 31;
+			if (chunkBottomY < minY) {
+				chunkBottomY = minY;
+			}
+
+			// Count blocks in this 32x32x32 chunk
+			int airCount = 0;
+			int totalCount = 0;
+			List<BlockEntry> chunkBlocks = new ArrayList<>();
+
+			for (BlockEntry block : allBlocksByPos.values()) {
+				if (block.y() >= chunkBottomY && block.y() <= chunkTopY) {
+					totalCount++;
+					if (isAir(block.id())) {
+						airCount++;
+					}
+					// Add block if we're including air, or if it's not air
+					if (includeAir || !isAir(block.id())) {
+						chunkBlocks.add(block);
+					}
+				}
+			}
+
+			// Add blocks from this chunk layer
+			resultBlocks.addAll(chunkBlocks);
+
+			// Check if this chunk is less than 10% air (i.e., >= 90% solid)
+			// If so, stop exporting further down
+			if (totalCount > 0) {
+				double airPercentage = (double) airCount / totalCount;
+				if (airPercentage < 0.10) {
+					LOGGER.debug("Stopping export at Y={} - chunk is {:.1f}% air (below 10% threshold)",
+							chunkBottomY, airPercentage * 100);
+					break;
+				}
+			}
+
+			// Move to next chunk below
+			chunkTopY = chunkBottomY - 1;
+		}
+
+		if (resultBlocks.isEmpty()) {
+			return null;
+		}
+
+		// Sort blocks by decreasing Y value
+		resultBlocks.sort((a, b) -> Integer.compare(b.y(), a.y()));
+
+		// Calculate actual min/max Y from exported blocks
+		int actualMinY = resultBlocks.stream().mapToInt(BlockEntry::y).min().orElse(minY);
+		int actualMaxY = resultBlocks.stream().mapToInt(BlockEntry::y).max().orElse(maxY);
+
+		return new TileData(tileOriginX, tileOriginZ, actualMinY, actualMaxY, resultBlocks);
+	}
+
+	/**
+	 * Check if a block ID represents air.
+	 */
+	private static boolean isAir(String blockId) {
+		return blockId.equals("minecraft:air") ||
+			   blockId.equals("minecraft:cave_air") ||
+			   blockId.equals("minecraft:void_air");
 	}
 
 	/**

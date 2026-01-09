@@ -133,20 +133,12 @@ public final class TileJsonExporter {
 							continue;
 						}
 
-						// Get the chunks from the region MCA file
+						// Get ALL 4 chunks for this tile (export full 32x32 tile even if only some chunks selected)
 						RegionChunk[] chunks = new RegionChunk[4];
-						if (selectedChunks == null || selectedChunks.get(idx00)) {
-							chunks[0] = regionMca.getChunk(idx00);
-						}
-						if (selectedChunks == null || selectedChunks.get(idx10)) {
-							chunks[1] = regionMca.getChunk(idx10);
-						}
-						if (selectedChunks == null || selectedChunks.get(idx01)) {
-							chunks[2] = regionMca.getChunk(idx01);
-						}
-						if (selectedChunks == null || selectedChunks.get(idx11)) {
-							chunks[3] = regionMca.getChunk(idx11);
-						}
+						chunks[0] = regionMca.getChunk(idx00);
+						chunks[1] = regionMca.getChunk(idx10);
+						chunks[2] = regionMca.getChunk(idx01);
+						chunks[3] = regionMca.getChunk(idx11);
 
 						// Calculate tile origin in world coordinates
 						int tileOriginX = (regionPos.getX() * 512) + (tileX * 32);
