@@ -190,8 +190,8 @@ public class TileJsonExporter {
 
 		// Calculate export range: start 15 blocks above highest non-air block
 		int exportStartY = Math.min(highestNonAirY + 15, maxY);
-		// Align to 32-block chunk boundaries (round up to next multiple of 32)
-		int chunkTopY = ((exportStartY + 31) / 32) * 32 - 1;
+		// Start at exportStartY and work downward in 32-block chunks
+		int chunkTopY = exportStartY;
 
 		List<BlockEntry> resultBlocks = new ArrayList<>();
 
@@ -220,19 +220,19 @@ public class TileJsonExporter {
 				}
 			}
 
-			// Add blocks from this chunk layer
-			resultBlocks.addAll(chunkBlocks);
-
 			// Check if this chunk is less than 10% air (i.e., >= 90% solid)
-			// If so, stop exporting further down
+			// If so, stop before adding this chunk
 			if (totalCount > 0) {
 				double airPercentage = (double) airCount / totalCount;
 				if (airPercentage < 0.10) {
-					LOGGER.debug("Stopping export at Y={} - chunk is {:.1f}% air (below 10% threshold)",
+					LOGGER.debug("Stopping export before Y={} - chunk is {:.1f}% air (below 10% threshold)",
 							chunkBottomY, airPercentage * 100);
 					break;
 				}
 			}
+
+			// Add blocks from this chunk layer
+			resultBlocks.addAll(chunkBlocks);
 
 			// Move to next chunk below
 			chunkTopY = chunkBottomY - 1;
