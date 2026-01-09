@@ -706,6 +706,38 @@ public class DialogHelper {
 		}
 	}
 
+	public static void exportSelectionAsJson(TileMap tileMap, Stage primaryStage) {
+		if (tileMap.getSelection().isEmpty()) {
+			String error = "no chunks selected to export";
+			LOGGER.warn(error);
+			new ErrorDialog(primaryStage, error);
+			return;
+		}
+
+		File dir = createDirectoryChooser(FileHelper.getLastOpenedDirectory("tiles_export", null)).showDialog(primaryStage);
+		if (dir == null) {
+			return;
+		}
+
+		Optional<ExportTilesJsonDialog.Result> result = new ExportTilesJsonDialog(primaryStage).showAndWait();
+		result.ifPresent(r -> {
+			CancellableProgressDialog cpd = new CancellableProgressDialog(Translation.DIALOG_PROGRESS_TITLE_EXPORTING_TILES_JSON, primaryStage);
+			cpd.showProgressBar(t -> net.querz.mcaselector.io.job.TileJsonExporter.exportTilesJson(
+				tileMap.getSelection(),
+				dir,
+				r.minY(),
+				r.maxY(),
+				r.includeAir(),
+				r.compress(),
+				t
+			));
+
+			if (!cpd.cancelled()) {
+				FileHelper.setLastOpenedDirectory("tiles_export", dir.getAbsolutePath());
+			}
+		});
+	}
+
 	public static DirectoryChooser createDirectoryChooser(String initialDirectory) {
 		DirectoryChooser directoryChooser = new DirectoryChooser();
 		if (initialDirectory != null) {

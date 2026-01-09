@@ -1,11 +1,19 @@
 package net.querz.mcaselector.version.java_1_16;
 
+import net.querz.mcaselector.io.mca.ChunkData;
 import net.querz.mcaselector.util.math.Bits;
+import net.querz.mcaselector.util.point.Point2i;
+import net.querz.mcaselector.version.ChunkFilter;
 import net.querz.mcaselector.version.Helper;
 import net.querz.mcaselector.version.MCVersionImplementation;
 import net.querz.mcaselector.version.java_1_13.ChunkFilter_17w47a;
 import net.querz.nbt.CompoundTag;
 import net.querz.nbt.ListTag;
+import net.querz.nbt.StringTag;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
@@ -128,6 +136,146 @@ public class ChunkFilter_20w17a {
 			int blockStatesIndex = blockIndex / indicesPerLong;
 			int startBit = (blockIndex % indicesPerLong) * bits;
 			return (int) Bits.bitRange(blockStates[blockStatesIndex], startBit, startBit + bits);
+		}
+	}
+
+	/**
+	 * BlockExtractor implementation for Minecraft 1.16+ (data version 2529+).
+	 * Uses the "Level" structure with "Sections" containing "Palette" and "BlockStates".
+	 */
+	@MCVersionImplementation(2529)
+	public static class BlockExtractor implements ChunkFilter.BlockExtractor {
+
+		@Override
+		public List<BlockInfo> extractBlocks(ChunkData data, boolean includeAir) {
+			return extractBlocks(data, Integer.MIN_VALUE, Integer.MAX_VALUE, includeAir);
+		}
+
+		@Override
+		public List<BlockInfo> extractBlocks(ChunkData data, int minY, int maxY, boolean includeAir) {
+			List<BlockInfo> blocks = new ArrayList<>();
+
+			CompoundTag root = Helper.getRegion(data);
+			CompoundTag level = Helper.levelFromRoot(root);
+			if (level == null) {
+				return blocks;
+			}
+
+			ListTag sections = Helper.tagFromCompound(level, "Sections");
+			if (sections == null) {
+				return blocks;
+			}
+
+			// Get chunk position for world coordinates
+			Point2i chunkPos = Helper.point2iFromCompound(level, "xPos", "zPos");
+			if (chunkPos == null) {
+				return blocks;
+			}
+			int baseX = chunkPos.getX() * 16;
+			int baseZ = chunkPos.getZ() * 16;
+
+			for (CompoundTag section : sections.iterateType(CompoundTag.class)) {
+				Number sectionY = Helper.numberFromCompound(section, "Y", null);
+				if (sectionY == null) {
+					continue;
+				}
+
+				int sectionBaseY = sectionY.intValue() * 16;
+
+				// Check if this section overlaps with our Y range
+				if (sectionBaseY > maxY || sectionBaseY + 15 < minY) {
+					continue;
+				}
+
+				ListTag palette = Helper.tagFromCompound(section, "Palette");
+				long[] blockStates = Helper.longArrayFromCompound(section, "BlockStates");
+
+				if (palette == null) {
+					continue;
+				}
+
+				// Handle single-palette sections (all same block, no blockStates array)
+				if (blockStates == null) {
+					if (palette.size() == 1) {
+						CompoundTag blockState = palette.getCompound(0);
+						String name = Helper.stringFromCompound(blockState, "Name");
+						Map<String, String> properties = extractProperties(blockState);
+
+						boolean isAir = isAirBlock(name);
+						if (!isAir || includeAir) {
+							for (int y = 0; y < 16; y++) {
+								int worldY = sectionBaseY + y;
+								if (worldY < minY || worldY > maxY) continue;
+								for (int z = 0; z < 16; z++) {
+									for (int x = 0; x < 16; x++) {
+										blocks.add(new BlockInfo(baseX + x, worldY, baseZ + z, name, properties));
+									}
+								}
+							}
+						}
+					}
+					continue;
+				}
+
+				// Process each block in the section
+				for (int y = 0; y < 16; y++) {
+					int worldY = sectionBaseY + y;
+					if (worldY < minY || worldY > maxY) continue;
+
+					for (int z = 0; z < 16; z++) {
+						for (int x = 0; x < 16; x++) {
+							int blockIndex = y * 256 + z * 16 + x;
+							int paletteIndex = getPaletteIndex(blockIndex, blockStates);
+
+							if (paletteIndex >= palette.size()) {
+								continue;
+							}
+
+							CompoundTag blockState = palette.getCompound(paletteIndex);
+							String name = Helper.stringFromCompound(blockState, "Name");
+
+							if (name == null) {
+								continue;
+							}
+
+							boolean isAir = isAirBlock(name);
+							if (!isAir || includeAir) {
+								Map<String, String> properties = extractProperties(blockState);
+								blocks.add(new BlockInfo(baseX + x, worldY, baseZ + z, name, properties));
+							}
+						}
+					}
+				}
+			}
+
+			return blocks;
+		}
+
+		protected int getPaletteIndex(int blockIndex, long[] blockStates) {
+			int bits = blockStates.length >> 6;
+			int indicesPerLong = (int) (64D / bits);
+			int blockStatesIndex = blockIndex / indicesPerLong;
+			int startBit = (blockIndex % indicesPerLong) * bits;
+			return (int) Bits.bitRange(blockStates[blockStatesIndex], startBit, startBit + bits);
+		}
+
+		protected Map<String, String> extractProperties(CompoundTag blockState) {
+			CompoundTag propertiesTag = Helper.tagFromCompound(blockState, "Properties");
+			if (propertiesTag == null || propertiesTag.isEmpty()) {
+				return Map.of();
+			}
+
+			Map<String, String> properties = new HashMap<>();
+			for (var entry : propertiesTag) {
+				if (entry.getValue() instanceof StringTag stringTag) {
+					properties.put(entry.getKey(), stringTag.getValue());
+				}
+			}
+			return properties;
+		}
+
+		protected boolean isAirBlock(String name) {
+			return "minecraft:air".equals(name) || "minecraft:cave_air".equals(name) || "minecraft:void_air".equals(name);
 		}
 	}
 }

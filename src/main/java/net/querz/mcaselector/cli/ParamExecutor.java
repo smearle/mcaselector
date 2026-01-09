@@ -68,6 +68,7 @@ public final class ParamExecutor {
 				change    Change NBT values in an entire world or only in chunks based on a selection
 				cache     Generate the cache images for an entire world
 				image     Generate a single image based on a selection
+				tiles     Export block data as 32x32-block JSON tiles based on a selection
 				""")
 			.hasArg()
 			.get());
@@ -196,6 +197,30 @@ public final class ParamExecutor {
 			.longOpt("zoom-level")
 			.desc("The zoom level for the cache to be generated. When not specified, all zoom levels will be generated")
 			.hasArg()
+			.get());
+
+		// tiles mode options
+		options.addOption(Option.builder()
+			.longOpt("min-y")
+			.desc("The minimum Y level to include in tile export (default: -64)")
+			.hasArg()
+			.get());
+		options.addOption(Option.builder()
+			.longOpt("max-y")
+			.desc("The maximum Y level to include in tile export (default: 319)")
+			.hasArg()
+			.get());
+		options.addOption(Option.builder()
+			.longOpt("include-air")
+			.desc("Whether to include air blocks in tile export")
+			.get());
+		options.addOption(Option.builder()
+			.longOpt("compress")
+			.desc("Whether to compress the output JSON files with gzip")
+			.get());
+		options.addOption(Option.builder()
+			.longOpt("pretty-print")
+			.desc("Whether to pretty-print the JSON output")
 			.get());
 
 		// world
@@ -359,6 +384,7 @@ public final class ParamExecutor {
 				case "change" -> change(future);
 				case "cache" -> cache(future);
 				case "image" -> image(future);
+				case "tiles" -> tiles(future);
 
 				// for updating and debugging translations
 				case "printMissingTranslations" -> Translations.printMissingTranslations(future);
@@ -980,6 +1006,27 @@ public final class ParamExecutor {
 		}
 
 		pixels.set(SelectionImageExporter.exportSelectionImage(data, overlayPool, generateProgress));
+	}
+
+	private void tiles(FutureTask<Boolean> future) throws ParseException {
+		ConfigProvider.WORLD = new WorldConfig();
+		ConfigProvider.WORLD.setWorldDirs(parseWorldDirectories(""));
+		File output = parseDirAndCreate("output");
+		Selection selection = loadSelection(false, true);
+
+		int minY = parseInt("min-y", -64, -2048, 2048);
+		int maxY = parseInt("max-y", 319, -2048, 2048);
+		if (minY > maxY) {
+			throw new ParseException("min-y cannot be greater than max-y");
+		}
+
+		boolean includeAir = line.hasOption("include-air");
+		boolean compress = line.hasOption("compress");
+
+		CLIProgress progress = new CLIProgress("exporting tiles");
+		progress.onDone(future);
+
+		net.querz.mcaselector.io.job.TileJsonExporter.exportTilesJson(selection, output, minY, maxY, includeAir, compress, progress);
 	}
 
 	private String parsedArgsToString() {

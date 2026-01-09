@@ -45,6 +45,7 @@ menu.selection.delete_chunks;Delete selected chunks
 menu.selection.import_selection;Import selection from .csv
 menu.selection.export_selection;Export selection as .csv
 menu.selection.export_image;Export as image
+menu.selection.export_tiles_json;Export blocks as JSON
 menu.selection.clear_cache;Clear cache
 menu.tools.import_chunks;Import chunks
 menu.tools.filter_chunks;Filter chunks
@@ -192,6 +193,13 @@ dialog.progress.title.saving_chunk;Saving chunk...
 dialog.progress.title.running_before;Executing before()
 dialog.progress.title.running_after;Executing after()
 dialog.progress.title.summing;Summing...
+dialog.progress.title.exporting_tiles_json;Exporting blocks to JSON...
+dialog.export_tiles_json.title;Export Blocks as JSON
+dialog.export_tiles_json.header;Export selection as 32x32-block JSON tiles.
+dialog.export_tiles_json.options.min_y;Min Y
+dialog.export_tiles_json.options.max_y;Max Y
+dialog.export_tiles_json.options.include_air;Include air blocks
+dialog.export_tiles_json.options.compress;Compress output (GZIP)
 dialog.error.button.copy_to_clipboard;Copy to Clipboard
 dialog.error.title;Error
 dialog.error.header;An Error occurred

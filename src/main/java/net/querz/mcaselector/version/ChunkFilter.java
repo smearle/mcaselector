@@ -313,4 +313,65 @@ public interface ChunkFilter {
 		void motionBlocking(ChunkData data);
 		void motionBlockingNoLeaves(ChunkData data);
 	}
+
+	/**
+	 * Interface for extracting all block data from a chunk with full metadata (block states).
+	 * Each block is returned as a {@link BlockInfo} record containing world-relative coordinates
+	 * and the full block state (name + properties).
+	 */
+	interface BlockExtractor {
+
+		/**
+		 * Represents a single block with its position and full state.
+		 * @param x World X coordinate
+		 * @param y World Y coordinate
+		 * @param z World Z coordinate
+		 * @param name Block identifier (e.g., "minecraft:stone")
+		 * @param properties Block state properties as a map (e.g., {"facing": "north", "half": "bottom"})
+		 */
+		record BlockInfo(int x, int y, int z, String name, Map<String, String> properties) {
+
+			/**
+			 * Returns true if this block is air (minecraft:air, minecraft:cave_air, minecraft:void_air).
+			 */
+			public boolean isAir() {
+				return "minecraft:air".equals(name) || "minecraft:cave_air".equals(name) || "minecraft:void_air".equals(name);
+			}
+
+			/**
+			 * Returns the full block state string (e.g., "minecraft:oak_stairs[facing=north,half=bottom]").
+			 */
+			public String toStateString() {
+				if (properties == null || properties.isEmpty()) {
+					return name;
+				}
+				StringBuilder sb = new StringBuilder(name).append('[');
+				boolean first = true;
+				for (Map.Entry<String, String> e : properties.entrySet()) {
+					if (!first) sb.append(',');
+					sb.append(e.getKey()).append('=').append(e.getValue());
+					first = false;
+				}
+				return sb.append(']').toString();
+			}
+		}
+
+		/**
+		 * Extracts all blocks from a chunk.
+		 * @param data The chunk data to extract blocks from
+		 * @param includeAir If false, air blocks are skipped
+		 * @return List of BlockInfo records for all (non-air) blocks in the chunk
+		 */
+		List<BlockInfo> extractBlocks(ChunkData data, boolean includeAir);
+
+		/**
+		 * Extracts blocks from a chunk within a specific Y range.
+		 * @param data The chunk data to extract blocks from
+		 * @param minY Minimum Y coordinate (inclusive)
+		 * @param maxY Maximum Y coordinate (inclusive)
+		 * @param includeAir If false, air blocks are skipped
+		 * @return List of BlockInfo records for blocks in the specified range
+		 */
+		List<BlockInfo> extractBlocks(ChunkData data, int minY, int maxY, boolean includeAir);
+	}
 }

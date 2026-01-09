@@ -7,6 +7,7 @@ import net.querz.mcaselector.util.range.Range;
 import net.querz.mcaselector.version.ChunkFilter;
 import net.querz.mcaselector.version.Helper;
 import net.querz.mcaselector.version.MCVersionImplementation;
+import net.querz.mcaselector.version.java_1_16.ChunkFilter_20w17a;
 import net.querz.mcaselector.version.java_1_17.ChunkFilter_20w45a;
 import net.querz.mcaselector.version.java_1_17.ChunkFilter_21w06a;
 import net.querz.mcaselector.version.java_1_9.ChunkFilter_15w32a;
@@ -900,6 +901,120 @@ public class ChunkFilter_21w43a {
 			// delete proto-entities
 			ListTag protoEntities = Helper.tagFromLevelFromRoot(Helper.getRegion(data), "entities", null);
 			deleteEntities(protoEntities, ranges);
+		}
+	}
+
+	/**
+	 * BlockExtractor implementation for Minecraft 1.18+ (data version 2844+).
+	 * Uses the flat "sections" structure with nested "block_states" compound containing "palette" and "data".
+	 */
+	@MCVersionImplementation(2844)
+	public static class BlockExtractor extends ChunkFilter_20w17a.BlockExtractor {
+
+		@Override
+		public List<BlockInfo> extractBlocks(ChunkData data, int minY, int maxY, boolean includeAir) {
+			List<BlockInfo> blocks = new ArrayList<>();
+
+			CompoundTag root = Helper.getRegion(data);
+			if (root == null) {
+				return blocks;
+			}
+
+			ListTag sections = Helper.tagFromCompound(root, "sections");
+			if (sections == null) {
+				return blocks;
+			}
+
+			// Get chunk position for world coordinates (1.18+ uses flat structure, not Level)
+			Integer xPos = Helper.intFromCompound(root, "xPos");
+			Integer zPos = Helper.intFromCompound(root, "zPos");
+			if (xPos == null || zPos == null) {
+				return blocks;
+			}
+			int baseX = xPos * 16;
+			int baseZ = zPos * 16;
+
+			for (CompoundTag section : sections.iterateType(CompoundTag.class)) {
+				Number sectionY = Helper.numberFromCompound(section, "Y", null);
+				if (sectionY == null) {
+					continue;
+				}
+
+				int sectionBaseY = sectionY.intValue() * 16;
+
+				// Check if this section overlaps with our Y range
+				if (sectionBaseY > maxY || sectionBaseY + 15 < minY) {
+					continue;
+				}
+
+				// 1.18+ uses nested "block_states" compound
+				CompoundTag blockStatesTag = Helper.tagFromCompound(section, "block_states");
+				if (blockStatesTag == null) {
+					continue;
+				}
+
+				ListTag palette = Helper.tagFromCompound(blockStatesTag, "palette");
+				long[] blockStates = Helper.longArrayFromCompound(blockStatesTag, "data");
+
+				if (palette == null) {
+					continue;
+				}
+
+				// Handle single-palette sections (all same block, no data array)
+				if (blockStates == null) {
+					if (palette.size() == 1) {
+						CompoundTag blockState = palette.getCompound(0);
+						String name = Helper.stringFromCompound(blockState, "Name");
+						Map<String, String> properties = extractProperties(blockState);
+
+						boolean isAir = isAirBlock(name);
+						if (!isAir || includeAir) {
+							for (int y = 0; y < 16; y++) {
+								int worldY = sectionBaseY + y;
+								if (worldY < minY || worldY > maxY) continue;
+								for (int z = 0; z < 16; z++) {
+									for (int x = 0; x < 16; x++) {
+										blocks.add(new BlockInfo(baseX + x, worldY, baseZ + z, name, properties));
+									}
+								}
+							}
+						}
+					}
+					continue;
+				}
+
+				// Process each block in the section
+				for (int y = 0; y < 16; y++) {
+					int worldY = sectionBaseY + y;
+					if (worldY < minY || worldY > maxY) continue;
+
+					for (int z = 0; z < 16; z++) {
+						for (int x = 0; x < 16; x++) {
+							int blockIndex = y * 256 + z * 16 + x;
+							int paletteIndex = getPaletteIndex(blockIndex, blockStates);
+
+							if (paletteIndex >= palette.size()) {
+								continue;
+							}
+
+							CompoundTag blockState = palette.getCompound(paletteIndex);
+							String name = Helper.stringFromCompound(blockState, "Name");
+
+							if (name == null) {
+								continue;
+							}
+
+							boolean isAir = isAirBlock(name);
+							if (!isAir || includeAir) {
+								Map<String, String> properties = extractProperties(blockState);
+								blocks.add(new BlockInfo(baseX + x, worldY, baseZ + z, name, properties));
+							}
+						}
+					}
+				}
+			}
+
+			return blocks;
 		}
 	}
 }

@@ -84,6 +84,7 @@ public class OptionBar extends BorderPane {
 	private final MenuItem importSelection = UIFactory.menuItem(Translation.MENU_SELECTION_IMPORT_SELECTION);
 	private final MenuItem exportSelection = UIFactory.menuItem(Translation.MENU_SELECTION_EXPORT_SELECTION);
 	private final MenuItem exportImage = UIFactory.menuItem(Translation.MENU_SELECTION_EXPORT_IMAGE);
+	private final MenuItem exportTilesJson = UIFactory.menuItem(Translation.MENU_SELECTION_EXPORT_TILES_JSON);
 	private final MenuItem clearSelectionCache = UIFactory.menuItem(Translation.MENU_SELECTION_CLEAR_CACHE);
 	private final MenuItem filterChunks = UIFactory.menuItem(Translation.MENU_TOOLS_FILTER_CHUNKS);
 	private final MenuItem changeFields = UIFactory.menuItem(Translation.MENU_TOOLS_CHANGE_FIELDS);
@@ -124,7 +125,7 @@ public class OptionBar extends BorderPane {
 				copy, paste, UIFactory.separator(),
 				exportChunks, delete, UIFactory.separator(),
 				importSelection, exportSelection, UIFactory.separator(),
-				exportImage, UIFactory.separator(),
+				exportImage, exportTilesJson, UIFactory.separator(),
 				clearSelectionCache);
 		tools.getItems().addAll(
 				importChunks, filterChunks, changeFields, editNBT, UIFactory.separator(),
@@ -185,6 +186,7 @@ public class OptionBar extends BorderPane {
 		importSelection.setOnAction(e -> DialogHelper.importSelection(tileMap, primaryStage));
 		exportSelection.setOnAction(e -> DialogHelper.exportSelection(tileMap, primaryStage));
 		exportImage.setOnAction(e -> DialogHelper.generateImageFromSelection(tileMap, primaryStage));
+		exportTilesJson.setOnAction(e -> DialogHelper.exportSelectionAsJson(tileMap, primaryStage));
 		clearSelectionCache.setOnAction(e -> CacheHelper.clearSelectionCache(tileMap));
 		filterChunks.setOnAction(e -> DialogHelper.filterChunks(tileMap, primaryStage));
 		changeFields.setOnAction(e -> DialogHelper.changeFields(tileMap, primaryStage));
